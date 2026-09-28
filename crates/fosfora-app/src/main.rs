@@ -494,11 +494,7 @@ impl ApplicationHandler for FosforaApp {
                                                 } else if let Some(text) =
                                                     t.source.strip_prefix("text:")
                                                 {
-                                                    if text.len() > 8 {
-                                                        format!("{}...", &text[..8])
-                                                    } else {
-                                                        text.to_string()
-                                                    }
+                                                    ui::widgets::truncate_chars(text, 9)
                                                 } else if let Some(rest) =
                                                     t.source.strip_prefix("video:")
                                                 {
@@ -1682,6 +1678,16 @@ impl ApplicationHandler for FosforaApp {
                         app.settings.tours_done.push(key.to_string());
                         app.settings.save();
                     }
+                }
+
+                // Photosensitivity flash limiter (#108)
+                let set_flash_limit: Option<fosfora_app::settings::FlashLimit> = app
+                    .egui_overlay
+                    .context()
+                    .data_mut(|d| d.remove_temp(egui::Id::new("set_flash_limit")));
+                if let Some(limit) = set_flash_limit {
+                    app.settings.flash_limit = limit;
+                    app.settings.save();
                 }
 
                 // Classic / workspace layout switch (#3122)
