@@ -1035,10 +1035,14 @@ impl App {
                 self.master_postprocess.enabled = pp_enabled;
             }
 
-            // Handle effect loads from web
-            for effect_idx in web_result.effect_loads {
+            // Handle effect load from web (coalesced to the last one this frame)
+            if let Some(effect_idx) = web_result.effect_load {
                 let active_locked = self.layer_stack.active().map_or(false, |l| l.locked);
-                if !active_locked {
+                if !crate::web::state::remote_loadable(&self.effect_loader.effects, effect_idx) {
+                    log::warn!(
+                        "Web remote asked for effect {effect_idx}, which it does not list; ignored"
+                    );
+                } else if !active_locked {
                     self.load_effect(effect_idx);
                 }
             }
@@ -1053,9 +1057,9 @@ impl App {
                 }
             }
 
-            // Handle preset loads from web
-            let had_preset_loads = !web_result.preset_loads.is_empty();
-            for preset_idx in web_result.preset_loads {
+            // Handle preset load from web (coalesced to the last one this frame)
+            let had_preset_loads = web_result.preset_load.is_some();
+            if let Some(preset_idx) = web_result.preset_load {
                 self.load_preset(preset_idx);
             }
 
