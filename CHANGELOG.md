@@ -38,6 +38,17 @@ Murmur, Symbiosis and Genesis flocked on the wrong neighbors: each bird, cell an
 - **A GIF with a huge or corrupt header crashed the app.** GIFs over 8192 px per side, or
   whose frames would take more than 2 GiB decoded, are now refused with an error; convert
   those to video.
+- **Fast animation stuttered in shows running for hours**: shader time lost precision as
+  uptime grew, to ~16 ms steps after a day and a half. `u.time` now wraps to 0 every hour, so
+  it stays smooth; anything periodic in it makes one jump per hour, like reloading the effect.
+- **Soft edges darkened wherever a layer used Normal blend over another**, costing antialiased
+  fringes and glows up to a quarter of their brightness. Normal is now a true premultiplied
+  over, so stacked layers' coverage also adds up instead of taking the larger of the two.
+- **A fader moved while an effect loaded could stick partway** over OSC, MIDI or the web
+  remote: once the input queue filled, the newest messages were the ones dropped. The oldest
+  are dropped now, so the last value sent always arrives.
+- **Webcam as a particle source** had no button and could only come back from a preset. It is
+  on the particle source row again.
 
 ## v2.0.0 — 2026-09-27
 
