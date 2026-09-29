@@ -105,6 +105,14 @@ pub struct WebConfig {
     /// venue network can drive the show.
     #[serde(default)]
     pub lan: bool,
+    /// What another device must present to connect: `?key=` on the network
+    /// link (the page passes it on to its WebSocket), `--key` / `FOSFORA_KEY`
+    /// for a bridge. This computer's own connections need none. Created on
+    /// first start and kept across restarts, so a bookmarked link or a Docker
+    /// env var keeps working; replacing it disconnects every holder of the old
+    /// one. Empty refuses every other device.
+    #[serde(default)]
+    pub access_key: String,
 }
 
 fn default_true() -> bool {
@@ -120,6 +128,31 @@ impl Default for WebConfig {
             enabled: true,
             port: 9002,
             lan: false,
+            access_key: String::new(),
+        }
+    }
+}
+
+/// Access-key symbols: lowercase letters and digits minus the lookalikes
+/// 0/o and 1/l, so a key read off the screen types back correctly.
+const KEY_ALPHABET: &[u8; 32] = b"abcdefghijkmnpqrstuvwxyz23456789";
+/// 20 symbols × 5 bits = 100 random bits: far beyond guessing over a network,
+/// short enough to type into a bridge's `--key`.
+const KEY_LEN: usize = 20;
+
+/// A fresh access key, or empty (which refuses every other device) if the OS
+/// has no randomness to give.
+pub fn new_access_key() -> String {
+    let mut bytes = [0u8; KEY_LEN];
+    match getrandom::fill(&mut bytes) {
+        // 256 is a multiple of 32, so the low five bits of each byte are uniform.
+        Ok(()) => bytes
+            .iter()
+            .map(|b| char::from(KEY_ALPHABET[usize::from(b & 31)]))
+            .collect(),
+        Err(e) => {
+            log::error!("No access key for the web remote (other devices are refused): {e}");
+            String::new()
         }
     }
 }
@@ -212,12 +245,31 @@ mod tests {
             enabled: false,
             port: 8080,
             lan: true,
+            access_key: "k".into(),
         };
         let json = serde_json::to_string(&c).unwrap();
         let c2: WebConfig = serde_json::from_str(&json).unwrap();
         assert!(!c2.enabled);
         assert_eq!(c2.port, 8080);
         assert!(c2.lan);
+        assert_eq!(c2.access_key, "k");
+    }
+
+    #[test]
+    fn access_keys_are_short_and_unambiguous() {
+        let (a, b) = (new_access_key(), new_access_key());
+        assert_eq!(a.len(), KEY_LEN);
+        assert!(a.bytes().all(|c| KEY_ALPHABET.contains(&c)), "{a}");
+        assert!(!a.contains(['0', 'o', '1', 'l']), "{a}");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_key_alphabet_has_32_distinct_symbols() {
+        let mut symbols = KEY_ALPHABET.to_vec();
+        symbols.sort_unstable();
+        symbols.dedup();
+        assert_eq!(symbols.len(), 32);
     }
 
     /// A web.json saved before LAN access was a setting has no `lan` key; it
