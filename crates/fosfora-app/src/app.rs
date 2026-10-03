@@ -42,6 +42,14 @@ use crate::ui::EguiOverlay;
 use crate::ui::panels::shader_editor::ShaderEditorState;
 use crate::web::WebSystem;
 
+/// The outgoing preset of a live Dissolve, with the volumetric settings it
+/// rendered with (the incoming preset's load replaces App's).
+pub struct RetiringStack {
+    pub stack: LayerStack,
+    pub volumetric_enabled: bool,
+    pub volumetric_params: crate::gpu::volumetric::VolumetricParams,
+}
+
 pub struct App {
     pub gpu: GpuContext,
     pub start_time: Instant,
@@ -153,6 +161,16 @@ pub struct App {
     /// The switch in flight: the frame crossfade and the param morph read
     /// their progress from it, whether a cue or a preset click started it.
     pub active_transition: Option<crate::scene::switch::ActiveTransition>,
+    /// The outgoing preset of a live Dissolve, still animating until the fade
+    /// ends ("Keep moving"). Its own field so OSC, bindings, the web remote
+    /// and the UI, which all address layers by index, only ever reach the
+    /// live stack.
+    pub retiring: Option<RetiringStack>,
+    /// Composites `retiring`. A second compositor, not the live one reused:
+    /// each composite writes its blend uniforms with `queue.write_buffer`,
+    /// and two composites through one compositor in a frame would both read
+    /// the last write. Made on the first live fade and kept.
+    pub retire_compositor: Option<Compositor>,
     /// Cue whose `param_overrides` apply after the next preset finishes
     /// loading. Consumed at the END of `apply_preset_immediately`, which is the
     /// one point every load path funnels through — the sync fast path, the
@@ -576,6 +594,8 @@ impl App {
             transition_renderer: None,
             staged_switch: None,
             active_transition: None,
+            retiring: None,
+            retire_compositor: None,
             pending_cue_overrides: None,
             media_loads: Vec::new(),
             midi_clock: MidiClock::new(),
@@ -662,6 +682,19 @@ impl App {
         if width == 0 || height == 0 {
             return;
         }
+        // A fade's pictures are the old size: the snapshot is reallocated
+        // below, and the outgoing stack would need a full resize for a second
+        // at most. End the fade. (A lost surface "resizes" to the same size;
+        // that keeps it.)
+        if (width, height)
+            != (
+                self.gpu.surface_config.width,
+                self.gpu.surface_config.height,
+            )
+        {
+            self.active_transition = None;
+            self.retiring = None;
+        }
         self.gpu.resize(width, height);
         for layer in &mut self.layer_stack.layers {
             layer.resize(
@@ -675,6 +708,9 @@ impl App {
             layer.resize_media(&self.gpu.device, &self.gpu.queue, width, height);
         }
         self.compositor.resize(&self.gpu.device, width, height);
+        if let Some(c) = self.retire_compositor.as_mut() {
+            c.resize(&self.gpu.device, width, height);
+        }
         // The compositor just recreated the @backdrop texture; every executor
         // holds a cloned handle to the OLD one. Refresh + rebind (set_backdrop
         // rebuilds bind groups only for layers that actually sample it).
@@ -1034,7 +1070,7 @@ impl App {
                     1 => TransitionType::Dissolve,
                     _ => TransitionType::ParamMorph,
                 });
-                self.set_preset_transition(kind, osc_result.preset_transition_secs);
+                self.set_preset_transition(kind, osc_result.preset_transition_secs, None);
             }
         }
 
@@ -1294,6 +1330,8 @@ impl App {
             }
             if finished {
                 self.active_transition = None;
+                // Frees the outgoing preset's GPU resources.
+                self.retiring = None;
             }
         }
 
@@ -1491,6 +1529,39 @@ impl App {
             self.volumetric_enabled,
             self.volumetric_params,
         );
+        // The outgoing preset of a live Dissolve keeps animating: the same
+        // per-frame work as the live stack's media, particle sources and
+        // uniforms above. Its bindings were replaced at the switch, so values
+        // they drove hold; audio and time still move it.
+        if let Some(r) = self.retiring.as_mut() {
+            for layer in &mut r.stack.layers {
+                match layer.content {
+                    LayerContent::Media(ref mut m) => {
+                        m.advance(dt);
+                        m.upload_frame(&self.gpu.queue);
+                    }
+                    LayerContent::Effect(ref mut e) => {
+                        if let Some(ref mut ps) = e.pass_executor.particle_system {
+                            ps.update_source(&self.gpu.queue, dt as f64);
+                            if ps.source_transition.is_some() {
+                                ps.advance_transition(&self.gpu.queue, dt);
+                            }
+                        }
+                    }
+                }
+            }
+            crate::gpu::frame_prep::prepare_effect_layers(
+                &mut r.stack.layers,
+                &self.uniforms,
+                &self.latest_audio.unwrap_or_default(),
+                dt,
+                &self.gpu.device,
+                &self.gpu.queue,
+                r.stack.active_layer,
+                r.volumetric_enabled,
+                r.volumetric_params,
+            );
+        }
 
         // Apply completed background shader compilations
         for result in self.shader_compiler.drain_results() {
@@ -2670,14 +2741,20 @@ impl App {
         self.begin_switch(index, None, style);
     }
 
-    /// Change the default preset-switch transition, saving it if it moved.
-    /// The length is held to the cue editor's 0.1–30 s.
+    /// Change the default preset-switch transition, and whether a Dissolve
+    /// keeps the outgoing preset moving, saving them if they moved. The length
+    /// is held to the cue editor's 0.1–30 s.
     pub fn set_preset_transition(
         &mut self,
         kind: Option<crate::scene::types::TransitionType>,
         secs: Option<f32>,
+        keep_moving: Option<bool>,
     ) {
         let mut changed = false;
+        if let Some(keep) = keep_moving.filter(|k| *k != self.settings.dissolve_keeps_moving) {
+            self.settings.dissolve_keeps_moving = keep;
+            changed = true;
+        }
         if let Some(kind) = kind.filter(|k| *k != self.settings.preset_transition) {
             self.settings.preset_transition = kind;
             changed = true;
@@ -2727,6 +2804,7 @@ impl App {
     fn end_transitions(&mut self) {
         self.staged_switch = None;
         self.active_transition = None;
+        self.retiring = None;
     }
 
     /// Start switching to a preset with a transition. A Cut loads at once;
@@ -2786,6 +2864,23 @@ impl App {
         use crate::scene::switch::{ActiveTransition, dissolves_frame, keep_changed_layers_still};
         use crate::scene::types::TransitionType;
 
+        // A live fade already running is superseded: this switch fades from
+        // the still captured of it (`Outgoing::fade_running_live`).
+        let fade_running_live = self.retiring.take().is_some();
+        let live = crate::scene::switch::keeps_outgoing_moving(
+            staged.style.kind,
+            self.settings.dissolve_keeps_moving,
+            crate::scene::switch::Outgoing {
+                has_chains: self.trama.master_live()
+                    || self.layer_stack.layers.iter().any(|l| l.chain.is_some()),
+                has_locked: self.layer_stack.layers.iter().any(|l| l.locked),
+                fade_running_live,
+            },
+        );
+        if live {
+            self.retire_live_stack();
+        }
+
         let before = self.layer_keys();
         let mut from = MorphSnapshot::capture(
             self.layer_stack
@@ -2819,14 +2914,15 @@ impl App {
             );
             (from, to)
         });
-        let dissolve_frame = captured && dissolves_frame(kind, &before, &after);
+        let dissolve_frame = live || (captured && dissolves_frame(kind, &before, &after));
         log::info!(
-            "Preset switch: {} over {:.1} s (frame dissolve: {}, param morph: {}{})",
+            "Preset switch: {} over {:.1} s (frame dissolve: {}, outgoing: {}, param morph: {}{})",
             kind,
             staged.style.secs,
             dissolve_frame,
+            if live { "moving" } else { "still" },
             morph.is_some(),
-            if captured {
+            if captured || live {
                 ""
             } else {
                 ", no frame was captured"
@@ -2837,6 +2933,41 @@ impl App {
             dissolve_frame,
             morph,
         ));
+    }
+
+    /// Move the live layers aside to keep animating through a Dissolve, and
+    /// leave an empty stack for the incoming preset to build fresh layers in
+    /// (a reused layer could not be in both pictures).
+    fn retire_live_stack(&mut self) {
+        let (w, h) = (
+            self.gpu.surface_config.width,
+            self.gpu.surface_config.height,
+        );
+        let compositor = self.retire_compositor.get_or_insert_with(|| {
+            Compositor::new(&self.gpu.device, GpuContext::hdr_format(), w, h)
+        });
+        let mut stack = std::mem::replace(&mut self.layer_stack, LayerStack::new());
+        // Their executors sample the live compositor's @backdrop; the
+        // outgoing picture composites through its own.
+        for layer in &mut stack.layers {
+            if let Some(e) = layer.as_effect_mut() {
+                e.pass_executor.set_backdrop(
+                    Some((
+                        compositor.backdrop.view.clone(),
+                        compositor.backdrop.sampler.clone(),
+                    )),
+                    &self.gpu.device,
+                    &e.uniform_buffer,
+                    &self.placeholder,
+                    &self.audio_textures,
+                );
+            }
+        }
+        self.retiring = Some(RetiringStack {
+            stack,
+            volumetric_enabled: self.volumetric_enabled,
+            volumetric_params: self.volumetric_params,
+        });
     }
 
     /// What each layer shows, for deciding whether a Morph must also dissolve.
@@ -4024,18 +4155,48 @@ impl App {
             profiler,
         );
 
-        // Dissolve crossfade: blend the captured outgoing frame into the
-        // live one while a switch that dissolves is in flight.
+        // Dissolve crossfade while a switch that dissolves is in flight: from
+        // the outgoing preset still animating ("Keep moving"), or else from
+        // the still captured of it. The outgoing stack composites through its
+        // own compositor with no chains (it has none), no layer pictures (they
+        // are keyed by live layer index) and no profiler scopes.
         let source = match (&self.active_transition, &self.transition_renderer) {
-            (Some(t), Some(tr)) if t.dissolve_frame && tr.has_snapshot() => tr
-                .crossfade(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    &mut encoder,
-                    source,
-                    t.progress(),
-                )
-                .unwrap_or(source),
+            (Some(t), Some(tr)) if t.dissolve_frame => {
+                let outgoing = match (&self.retiring, self.retire_compositor.as_mut()) {
+                    (Some(r), Some(compositor)) => {
+                        Some(crate::gpu::frame_graph::execute_and_composite(
+                            &r.stack,
+                            compositor,
+                            None,
+                            &self.chain_targets,
+                            None,
+                            &self.gpu.device,
+                            &self.gpu.queue,
+                            &mut encoder,
+                            crate::gpu::profiler::ProfilerHandle::none(),
+                        ))
+                    }
+                    _ => None,
+                };
+                match outgoing {
+                    Some(outgoing) => tr.blend(
+                        &self.gpu.device,
+                        &self.gpu.queue,
+                        &mut encoder,
+                        outgoing,
+                        source,
+                        t.progress(),
+                    ),
+                    None => tr.crossfade(
+                        &self.gpu.device,
+                        &self.gpu.queue,
+                        &mut encoder,
+                        source,
+                        t.progress(),
+                    ),
+                }
+                .unwrap_or(source)
+            }
             _ => source,
         };
         // A staged switch captures the frame shown now, crossfade included,
@@ -4148,9 +4309,14 @@ impl App {
             );
         }
 
-        // Flip ping-pong for all layers
+        // Flip ping-pong for all layers, the outgoing preset's included
         for layer in &mut self.layer_stack.layers {
             layer.flip();
+        }
+        if let Some(r) = self.retiring.as_mut() {
+            for layer in &mut r.stack.layers {
+                layer.flip();
+            }
         }
         self.frame_count = self.frame_count.wrapping_add(1);
 

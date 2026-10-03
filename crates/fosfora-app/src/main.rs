@@ -947,6 +947,7 @@ impl ApplicationHandler for FosforaApp {
                         let transition = (
                             app.settings.preset_transition,
                             app.settings.preset_transition_secs,
+                            app.settings.dissolve_keeps_moving,
                         );
                         ctx.data_mut(|d| {
                             d.insert_temp(egui::Id::new("preset_loading_state"), loading_state);
@@ -2251,12 +2252,12 @@ impl ApplicationHandler for FosforaApp {
                 if let Some(idx) = pending_preset {
                     app.switch_preset(idx);
                 }
-                let set_transition: Option<(crate::scene::types::TransitionType, f32)> = app
+                let set_transition: Option<(crate::scene::types::TransitionType, f32, bool)> = app
                     .egui_overlay
                     .context()
                     .data_mut(|d| d.remove_temp(egui::Id::new("set_preset_transition")));
-                if let Some((kind, secs)) = set_transition {
-                    app.set_preset_transition(Some(kind), Some(secs));
+                if let Some((kind, secs, keep_moving)) = set_transition {
+                    app.set_preset_transition(Some(kind), Some(secs), Some(keep_moving));
                 }
                 let save_preset: Option<String> = app
                     .egui_overlay

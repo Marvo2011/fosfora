@@ -220,6 +220,12 @@ pub struct SettingsConfig {
     /// Length of [`Self::preset_transition`] in seconds.
     #[serde(default = "default_preset_transition_secs")]
     pub preset_transition_secs: f32,
+    /// Keep the outgoing preset animating through a Dissolve (preset switch
+    /// or cue) instead of fading from a still of it. On by default; off for a
+    /// rig that cannot render two presets at once, since both run every frame
+    /// of the fade.
+    #[serde(default = "default_true")]
+    pub dissolve_keeps_moving: bool,
 }
 
 /// Serde default for [`SettingsConfig::preset_transition_secs`], matching a
@@ -260,6 +266,7 @@ impl Default for SettingsConfig {
             flash_limit: FlashLimit::Auto,
             preset_transition: crate::scene::types::TransitionType::Cut,
             preset_transition_secs: default_preset_transition_secs(),
+            dissolve_keeps_moving: true,
         }
     }
 }
@@ -367,6 +374,7 @@ mod tests {
             crate::scene::types::TransitionType::Cut
         );
         assert_eq!(c.preset_transition_secs, 1.0);
+        assert!(c.dissolve_keeps_moving);
     }
 
     #[test]

@@ -747,6 +747,8 @@ A preset captures:
 
 The **Switch** row at the top of the Presets panel (on the left in the Perform workspace, and in Build's left column, where the Presets section starts closed) sets how the picture changes when you switch presets by clicking one, with Next/Prev Preset, or from the web remote: **Cut**, **Dissolve** or **Morph**, plus a length in seconds. It works the same way as a cue's transition (see [Transitions](#transitions)) and is saved with your settings. Scene cues keep their own transitions. A preset with a video starts its transition once the video has finished loading, so the fade never runs ahead of the picture.
 
+With **Dissolve** picked, a **Keep moving** checkbox appears next to it. On (the default), the outgoing preset keeps animating through the fade. Off, the fade starts from a still of the outgoing frame. Keeping it moving renders both presets every frame of the fade, so turn it off if dissolves stutter on your machine. The setting covers every Dissolve, scene cues included, and also shows in the cue editor when a cue uses Dissolve. A preset with a trama chain or a locked layer always fades from a still.
+
 ### Locked Layers
 
 Locked layers (🔒) are skipped during preset loading. This lets you "freeze" a layer while cycling through presets, which is useful for keeping a background layer constant while swapping foreground effects.
@@ -790,7 +792,7 @@ Cues can be reordered, edited, and deleted from the scene panel. Changes are aut
 | **Dissolve** | GPU crossfade between outgoing and incoming visuals over the transition duration |
 | **Morph** | Interpolates all parameters and layer opacities smoothly over the transition duration, adding a crossfade when a layer changes effect |
 
-**Dissolve** fades from a still of the outgoing frame into the new preset, which is running live underneath. **Morph** keeps the current effects running and smoothly slides their parameters toward the target preset's values. When a layer changes to a different effect, blend mode or chain, parameters cannot carry it across, so Morph crossfades the frame as well, and only the layers that kept their effect morph.
+**Dissolve** fades the outgoing preset into the new one, both still animating; with **Keep moving** off it fades from a still of the outgoing frame instead (see [Switch Transition](#switch-transition)). **Morph** keeps the current effects running and smoothly slides their parameters toward the target preset's values. When a layer changes to a different effect, blend mode or chain, parameters cannot carry it across, so Morph crossfades the frame as well, and only the layers that kept their effect morph.
 
 ### Advance Modes
 

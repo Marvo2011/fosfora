@@ -9,6 +9,7 @@
 - **Transitions when switching presets.** Clicking a preset, Next/Prev Preset and the web remote can now dissolve or morph instead of cutting: pick Cut, Dissolve or Morph and a length in the new Switch row at the top of the Presets panel (left side of Perform, and Build's left column), or over OSC with `/fosfora/preset/transition` and `/fosfora/preset/transition_secs`. The default stays Cut. Suggested by @Marvo2011.
 
 ### Changed
+- **Dissolves keep the outgoing preset moving.** It used to freeze for the length of the fade. Both presets render during a Dissolve, so if that stutters on your machine, untick **Keep moving** next to Dissolve in the Switch row or the cue editor. Presets with a trama chain or a locked layer still fade from a still.
 - **Morph crossfades layers that change effect.** A Morph between presets or scene cues with different effects used to land as a cut; those layers now crossfade while the rest morph.
 
 ### Fixed

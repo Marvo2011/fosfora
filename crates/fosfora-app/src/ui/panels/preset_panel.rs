@@ -142,21 +142,39 @@ pub fn draw_preset_section_open(ui: &mut Ui, store: &PresetStore, default_open: 
     }
 }
 
+/// "Keep moving" for a Dissolve. One setting covers every Dissolve, preset
+/// switches and scene cues alike, so it shows wherever a Dissolve is picked.
+pub(crate) fn keep_moving_checkbox(ui: &mut Ui, keep_moving: bool, on_change: impl FnOnce(bool)) {
+    let mut v = keep_moving;
+    if ui
+        .checkbox(&mut v, RichText::new("Keep moving").size(SMALL_SIZE))
+        .on_hover_text(
+            "The outgoing preset keeps animating through the fade instead of freezing. \
+             Both presets render every frame of the fade, so turn this off if dissolves \
+             stutter on your machine. Applies to every Dissolve, scene cues included.",
+        )
+        .changed()
+    {
+        on_change(v);
+    }
+}
+
 /// How switching to another preset changes the picture (#217). Reads the
-/// setting main publishes as `preset_transition` and sends a change back as
-/// `set_preset_transition`; scene cues keep their own transitions.
+/// setting main publishes as `preset_transition` (kind, seconds, keep moving)
+/// and sends a change back as `set_preset_transition`; scene cues keep their
+/// own transitions.
 fn draw_transition_row(ui: &mut Ui) {
     use crate::scene::types::TransitionType;
 
-    let Some((kind, secs)) = ui
+    let Some((kind, secs, keep_moving)) = ui
         .ctx()
-        .data(|d| d.get_temp::<(TransitionType, f32)>(egui::Id::new("preset_transition")))
+        .data(|d| d.get_temp::<(TransitionType, f32, bool)>(egui::Id::new("preset_transition")))
     else {
         return;
     };
     let tc = theme_colors(ui.ctx());
     let ctx = ui.ctx().clone();
-    let send = |v: (TransitionType, f32)| {
+    let send = |v: (TransitionType, f32, bool)| {
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("set_preset_transition"), v));
     };
     ui.horizontal_wrapped(|ui| {
@@ -172,7 +190,7 @@ fn draw_transition_row(ui: &mut Ui) {
                 .clicked()
                 && *t != kind
             {
-                send((*t, secs));
+                send((*t, secs, keep_moving));
             }
         }
         if kind != TransitionType::Cut {
@@ -188,8 +206,11 @@ fn draw_transition_row(ui: &mut Ui) {
                         .max_decimals(1)
                 },
             ) {
-                send((kind, v));
+                send((kind, v, keep_moving));
             }
+        }
+        if kind == TransitionType::Dissolve {
+            keep_moving_checkbox(ui, keep_moving, |k| send((kind, secs, k)));
         }
     });
     ui.add_space(4.0);

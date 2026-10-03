@@ -896,6 +896,16 @@ fn edit_row(ui: &mut Ui, info: &SceneInfo, tl: &TimelineInfo) {
                 send(&ctx, "scene_set_cue_transition_secs", (i, v));
             }
         }
+        if cue.transition == TransitionType::Dissolve {
+            // The global setting, published with the preset Switch row's.
+            if let Some((kind, secs, keep)) = ctx
+                .data(|d| d.get_temp::<(TransitionType, f32, bool)>(Id::new("preset_transition")))
+            {
+                crate::ui::panels::preset_panel::keep_moving_checkbox(ui, keep, |k| {
+                    send(&ctx, "set_preset_transition", (kind, secs, k));
+                });
+            }
+        }
 
         if tl.advance_mode == AdvanceMode::Timer {
             ui.separator();

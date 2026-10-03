@@ -167,6 +167,34 @@ pub fn keep_changed_layers_still(
     }
 }
 
+/// The outgoing side of a switch, as far as keeping it moving is concerned.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Outgoing {
+    /// Some layer, or the master, carries a trama chain. Chain slots are
+    /// allocated per stack, so an outgoing chain would collide with the
+    /// incoming preset's.
+    pub has_chains: bool,
+    /// A locked layer stays in the live stack and cannot also animate in the
+    /// outgoing one without advancing twice a frame.
+    pub has_locked: bool,
+    /// A live fade is already running: its two pictures are captured as a
+    /// still rather than nesting a third stack.
+    pub fade_running_live: bool,
+}
+
+/// Whether a switch keeps the outgoing preset animating through its fade,
+/// rather than fading from a still of it. Only a Dissolve does, and only
+/// with "Keep moving" on: it renders both presets every frame of the fade.
+/// Morph keeps its layers in place to slide their params, so there is no
+/// outgoing stack to keep.
+pub fn keeps_outgoing_moving(kind: TransitionType, keep_moving: bool, out: Outgoing) -> bool {
+    kind == TransitionType::Dissolve
+        && keep_moving
+        && !out.has_chains
+        && !out.has_locked
+        && !out.fade_running_live
+}
+
 /// A switch in flight: drives the frame crossfade and the param morph.
 pub struct ActiveTransition {
     duration: f32,
@@ -348,6 +376,46 @@ mod tests {
         keep_changed_layers_still(&mut from, &[effect(1), effect(2)], &[effect(1), effect(9)]);
         assert_eq!(from.params[0].len(), 1);
         assert!(from.params[1].is_empty());
+    }
+
+    #[test]
+    fn only_a_dissolve_with_keep_moving_keeps_the_outgoing_preset_moving() {
+        let clean = Outgoing::default();
+        assert!(keeps_outgoing_moving(TransitionType::Dissolve, true, clean));
+        assert!(!keeps_outgoing_moving(
+            TransitionType::Dissolve,
+            false,
+            clean
+        ));
+        assert!(!keeps_outgoing_moving(
+            TransitionType::ParamMorph,
+            true,
+            clean
+        ));
+        assert!(!keeps_outgoing_moving(TransitionType::Cut, true, clean));
+    }
+
+    #[test]
+    fn chains_locks_and_a_running_live_fade_fall_back_to_the_still() {
+        for out in [
+            Outgoing {
+                has_chains: true,
+                ..Default::default()
+            },
+            Outgoing {
+                has_locked: true,
+                ..Default::default()
+            },
+            Outgoing {
+                fade_running_live: true,
+                ..Default::default()
+            },
+        ] {
+            assert!(
+                !keeps_outgoing_moving(TransitionType::Dissolve, true, out),
+                "{out:?}"
+            );
+        }
     }
 
     #[test]

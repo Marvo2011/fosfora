@@ -242,6 +242,20 @@ impl TransitionRenderer {
         progress: f32,
     ) -> Option<&'a RenderTarget> {
         let snapshot = self.snapshot.as_ref()?;
+        self.blend(device, queue, encoder, snapshot, incoming, progress)
+    }
+
+    /// Render `mix(outgoing, incoming, progress)`: the crossfade with a live
+    /// outgoing picture instead of the snapshot.
+    pub fn blend<'a>(
+        &'a self,
+        device: &Device,
+        queue: &Queue,
+        encoder: &mut CommandEncoder,
+        outgoing: &RenderTarget,
+        incoming: &RenderTarget,
+        progress: f32,
+    ) -> Option<&'a RenderTarget> {
         let output = self.output.as_ref()?;
 
         // Upload progress
@@ -258,7 +272,7 @@ impl TransitionRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&snapshot.view),
+                    resource: wgpu::BindingResource::TextureView(&outgoing.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
