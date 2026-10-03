@@ -2760,6 +2760,10 @@ impl App {
             changed = true;
         }
         if let Some(secs) = secs.filter(|v| v.is_finite()).map(|v| v.clamp(0.1, 30.0)) {
+            #[expect(
+                clippy::float_cmp,
+                reason = "change detection: any edit, however small, is stored"
+            )]
             if secs != self.settings.preset_transition_secs {
                 self.settings.preset_transition_secs = secs;
                 changed = true;
