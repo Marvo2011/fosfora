@@ -72,7 +72,7 @@ fn select(ctx: &egui::Context, info: &SceneInfo, cue: Option<usize>) {
 /// typed in: the app applies a change a frame later, and reading the old
 /// value back each frame made a drag stutter. Returns the new value when it
 /// changed.
-fn live_drag<T>(
+pub(crate) fn live_drag<T>(
     ui: &mut Ui,
     id: Id,
     current: T,

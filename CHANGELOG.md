@@ -5,6 +5,16 @@
 
 ## Unreleased
 
+### Added
+- **Transitions when switching presets.** Clicking a preset, Next/Prev Preset and the web remote can now dissolve or morph instead of cutting: pick Cut, Dissolve or Morph and a length in the new Switch row at the top of the Presets panel (left side of Perform, and Build's left column), or over OSC with `/fosfora/preset/transition` and `/fosfora/preset/transition_secs`. The default stays Cut. Suggested by @Marvo2011.
+
+### Changed
+- **Morph crossfades layers that change effect.** A Morph between presets or scene cues with different effects used to land as a cut; those layers now crossfade while the rest morph.
+
+### Fixed
+- **Changing your mind while a preset with a video was loading** switched back to that preset seconds later, when its video finished decoding; the later choice now sticks.
+- **A scene cue dissolving into a preset with a video** faded into the old preset and then hard-cut to the new one once the video loaded, about 13 s later for a typical clip. The dissolve now starts when the video is ready.
+
 ## v2.0.1 — 2026-09-30
 
 Fixes for 2.0: the second output window and webcams work on macOS, the audio analysis reads

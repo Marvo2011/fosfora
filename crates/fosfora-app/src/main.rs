@@ -944,8 +944,13 @@ impl ApplicationHandler for FosforaApp {
                     // Store preset loading state in egui temp data for UI panels
                     {
                         let loading_state = app.preset_loader.state.clone();
+                        let transition = (
+                            app.settings.preset_transition,
+                            app.settings.preset_transition_secs,
+                        );
                         ctx.data_mut(|d| {
                             d.insert_temp(egui::Id::new("preset_loading_state"), loading_state);
+                            d.insert_temp(egui::Id::new("preset_transition"), transition);
                         });
                     }
 
@@ -2244,7 +2249,14 @@ impl ApplicationHandler for FosforaApp {
                     .context()
                     .data_mut(|d| d.remove_temp(egui::Id::new("pending_preset")));
                 if let Some(idx) = pending_preset {
-                    app.load_preset(idx);
+                    app.switch_preset(idx);
+                }
+                let set_transition: Option<(crate::scene::types::TransitionType, f32)> = app
+                    .egui_overlay
+                    .context()
+                    .data_mut(|d| d.remove_temp(egui::Id::new("set_preset_transition")));
+                if let Some((kind, secs)) = set_transition {
+                    app.set_preset_transition(Some(kind), Some(secs));
                 }
                 let save_preset: Option<String> = app
                     .egui_overlay
@@ -4517,13 +4529,13 @@ impl ApplicationHandler for FosforaApp {
                         }
                         TriggerAction::NextPreset if !app.preset_store.presets.is_empty() => {
                             let num = app.preset_store.presets.len();
-                            let current = app.preset_store.current_preset.unwrap_or(0);
-                            app.load_preset((current + 1) % num);
+                            let current = app.target_preset().unwrap_or(0);
+                            app.switch_preset((current + 1) % num);
                         }
                         TriggerAction::PrevPreset if !app.preset_store.presets.is_empty() => {
                             let num = app.preset_store.presets.len();
-                            let current = app.preset_store.current_preset.unwrap_or(0);
-                            app.load_preset(if current == 0 { num - 1 } else { current - 1 });
+                            let current = app.target_preset().unwrap_or(0);
+                            app.switch_preset(if current == 0 { num - 1 } else { current - 1 });
                         }
                         TriggerAction::NextLayer if app.layer_stack.layers.len() > 1 => {
                             let num = app.layer_stack.layers.len();

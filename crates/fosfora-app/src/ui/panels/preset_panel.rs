@@ -142,6 +142,59 @@ pub fn draw_preset_section_open(ui: &mut Ui, store: &PresetStore, default_open: 
     }
 }
 
+/// How switching to another preset changes the picture (#217). Reads the
+/// setting main publishes as `preset_transition` and sends a change back as
+/// `set_preset_transition`; scene cues keep their own transitions.
+fn draw_transition_row(ui: &mut Ui) {
+    use crate::scene::types::TransitionType;
+
+    let Some((kind, secs)) = ui
+        .ctx()
+        .data(|d| d.get_temp::<(TransitionType, f32)>(egui::Id::new("preset_transition")))
+    else {
+        return;
+    };
+    let tc = theme_colors(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let send = |v: (TransitionType, f32)| {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("set_preset_transition"), v));
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new("Switch")
+                .size(SMALL_SIZE)
+                .color(tc.text_secondary),
+        )
+        .on_hover_text("How the picture changes when you switch presets. Scene cues use their own transitions.");
+        for t in TransitionType::ALL {
+            if ui
+                .selectable_label(*t == kind, RichText::new(t.display_name()).size(SMALL_SIZE))
+                .clicked()
+                && *t != kind
+            {
+                send((*t, secs));
+            }
+        }
+        if kind != TransitionType::Cut {
+            if let Some(v) = crate::ui::panels::cue_strip::live_drag(
+                ui,
+                egui::Id::new("preset_transition_secs"),
+                secs,
+                |v| {
+                    egui::DragValue::new(v)
+                        .range(0.1..=30.0)
+                        .speed(0.05)
+                        .suffix(" s")
+                        .max_decimals(1)
+                },
+            ) {
+                send((kind, v));
+            }
+        }
+    });
+    ui.add_space(4.0);
+}
+
 fn draw_preset_panel(ui: &mut Ui, store: &PresetStore) {
     let tc = theme_colors(ui.ctx());
     let time = ui.input(|i| i.time);
@@ -158,6 +211,8 @@ fn draw_preset_panel(ui: &mut Ui, store: &PresetStore) {
             _ => None,
         })
     });
+
+    draw_transition_row(ui);
 
     // Styled dirty bar
     if store.dirty {
