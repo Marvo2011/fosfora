@@ -3,7 +3,10 @@
 <!-- Release workflow extracts notes between ## vX.Y.Z headers via awk. -->
 <!-- Keep the "## vX.Y.Z — date" format for automatic release notes. -->
 
-## Unreleased
+## v2.1.0 — 2026-10-03
+
+Several cameras in one preset, RTMP streams from phones and action cameras as camera input, and
+transitions for plain preset switches. The Classic layout is gone, as announced with 2.0.
 
 ### Added
 - **Transitions when switching presets.** Clicking a preset, Next/Prev Preset and the web remote can now dissolve or morph instead of cutting: pick Cut, Dissolve or Morph and a length in the new Switch row at the top of the Presets panel (left side of Perform, and Build's left column), or over OSC with `/fosfora/preset/transition` and `/fosfora/preset/transition_secs`. The default stays Cut. Suggested by @Marvo2011.
