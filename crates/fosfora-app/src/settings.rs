@@ -229,13 +229,6 @@ pub struct SettingsConfig {
     /// reproduces pre-overlay behavior byte-for-byte on old settings files.
     #[serde(default)]
     pub output_alpha: AlphaOutputMode,
-    /// Keep the v1 two-side-panel layout instead of the v2 workspace shell
-    /// (#3122). Off by default, and a settings file from before v2.0.0 has no
-    /// such field, so upgrading installs open in the workspace too (Kevin,
-    /// M6 #3130); this switch is the way back. It ships for one release and
-    /// goes away in v2.1.
-    #[serde(default)]
-    pub classic_layout: bool,
     /// Display the second output window was last opened on, by name (#3122).
     /// A name rather than an index: displays come and go and winit reorders
     /// them, and an index would send the output to whatever took that slot.
@@ -304,7 +297,6 @@ impl Default for SettingsConfig {
             auto_reconnect: true,
             favorite_effects: Vec::new(),
             output_alpha: AlphaOutputMode::default(),
-            classic_layout: false,
             output_display: None,
             ui_scale: 1.0,
             tours_done: Vec::new(),
@@ -423,16 +415,12 @@ mod tests {
     }
 
     #[test]
-    fn an_upgrading_install_opens_in_the_workspace() {
-        // A v1 settings file has no classic_layout: v2.0.0 opens it in the
-        // workspace, the same as a fresh install. A saved choice is kept.
-        let json = r#"{"version":1,"theme":"Dark"}"#;
+    fn a_settings_file_that_chose_classic_still_loads() {
+        // v2.0.x saved `classic_layout`; the Classic layout went in v2.1.0.
+        // The key is ignored and the rest of the file is kept.
+        let json = r#"{"version":1,"theme":"Dark","classic_layout":true,"ui_scale":1.5}"#;
         let c: SettingsConfig = serde_json::from_str(json).unwrap();
-        assert!(!c.classic_layout);
-        assert!(!SettingsConfig::default().classic_layout);
-        let json = r#"{"version":1,"theme":"Dark","classic_layout":true}"#;
-        let c: SettingsConfig = serde_json::from_str(json).unwrap();
-        assert!(c.classic_layout);
+        assert!((c.ui_scale - 1.5).abs() < f32::EPSILON);
     }
 
     #[test]

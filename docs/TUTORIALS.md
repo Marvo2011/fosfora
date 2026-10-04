@@ -36,7 +36,7 @@ A comprehensive guide to using Fosfora, a real-time particle and shader engine f
 2. **Play some music**: anything your computer can hear. The visuals start reacting immediately using your default input device. (Hearing nothing react? See [Audio → Choosing an Input](#audio).)
 3. **Pick a look.** In the **Effects** panel on the left, click any effect to load it onto the active layer. Try Aurora, Storm, or Tesla to feel the range.
 4. **Go big.** Press **F** for borderless fullscreen. Press **F** again (or **Esc**) to come back.
-5. **Make it yours.** Drag the sliders in the right panel to reshape the effect. Every one is audio-mappable later. When something looks great, save it as a preset.
+5. **Make it yours.** Drag the sliders under **Parameters**, in the middle column of Build, to reshape the effect. Every one is audio-mappable later. When something looks great, save it as a preset.
 
 That's the whole loop: **open → play music → pick an effect → fullscreen**. Everything below goes deeper on each piece.
 
@@ -1280,7 +1280,7 @@ NDI (Network Device Interface) lets you send Fosfora's output to other software 
 
 ### Themes and interface scale
 
-Pick a theme under **Appearance** (Setup in the workspace layout, Settings in Classic):
+Pick a theme under **Appearance** in Setup:
 Light, Gray and Black use no hue at all, and Blue and orange uses a pair that stays
 distinct for red–green color blindness. Every built-in theme meets WCAG 2.2 AA contrast.
 

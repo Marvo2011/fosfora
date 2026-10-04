@@ -294,7 +294,7 @@ impl ApplicationHandler for FosforaApp {
                         {
                             // The tour sees the same Escape in its own frame
                             // and ends itself; here it only must not quit.
-                        } else if app.trama.canvas_open && !app.settings.classic_layout {
+                        } else if app.trama.canvas_open {
                             app.trama.canvas_open = false;
                         } else if app.output_window.is_some() {
                             app.close_output_window();
@@ -963,8 +963,8 @@ impl ApplicationHandler for FosforaApp {
                         });
                     }
 
-                    // Second output window (#3122): both layouts draw the same
-                    // control, and neither takes it as an argument.
+                    // Second output window (#3122): published for the shell
+                    // rather than passed to it as an argument.
                     {
                         let info = crate::ui::panels::output_window_panel::OutputWindowInfo {
                             displays: app.displays.clone(),
@@ -1010,7 +1010,7 @@ impl ApplicationHandler for FosforaApp {
                     // are modals over Build, beside its output column (#3125):
                     // opening either from anywhere goes to Build, and leaving
                     // Build puts them away.
-                    if !app.shader_editor.open && !app.settings.classic_layout {
+                    if !app.shader_editor.open {
                         use crate::ui::shell::Workspace;
                         let was_id = egui::Id::new("v2_modals_were_open");
                         let (was_trama, was_matrix): (bool, bool) =
@@ -1029,7 +1029,7 @@ impl ApplicationHandler for FosforaApp {
                     // Get active layer's param_store (mutable for MIDI badges)
                     let active_params = app.layer_stack.active_mut();
                     if let Some(layer) = active_params {
-                        if !app.shader_editor.open && !app.settings.classic_layout {
+                        if !app.shader_editor.open {
                             // The First run tour, once (#3126).
                             let auto_id = egui::Id::new("tour_auto_started");
                             if app.egui_overlay.visible
@@ -1087,44 +1087,6 @@ impl ApplicationHandler for FosforaApp {
                             // Before the modals read their requests; the
                             // tour itself draws after them (#3127).
                             crate::ui::tour::gate(&ctx);
-                        } else if !app.shader_editor.open {
-                            crate::ui::panels::draw_panels(
-                                &ctx,
-                                app.egui_overlay.visible,
-                                &mut app.audio,
-                                &mut layer.param_store,
-                                &shader_error,
-                                &app.uniforms,
-                                &app.effect_loader,
-                                &mut app.master_postprocess,
-                                &mut app.volumetric_enabled,
-                                &mut app.volumetric_params,
-                                particle_count,
-                                &mut app.midi,
-                                &mut app.osc,
-                                &mut app.web,
-                                &mut app.binding_bus,
-                                &app.preset_store,
-                                &layer_infos,
-                                active_layer,
-                                master_chain,
-                                media_info,
-                                webcam_info,
-                                particle_info,
-                                obstacle_info,
-                                lattice_info,
-                                helix_info,
-                                Some(scene_info),
-                                &app.status_error,
-                                &app.settings,
-                                app.egui_overlay.display_tex.map(|t| {
-                                    (
-                                        t,
-                                        app.display.width.max(1) as f32
-                                            / app.display.height.max(1) as f32,
-                                    )
-                                }),
-                            );
                         }
                         // Sync the chain's switch from Master's post-processing
                         app.post_process.enabled = app.master_postprocess.enabled;
@@ -1147,7 +1109,7 @@ impl ApplicationHandler for FosforaApp {
                     );
 
                     // Trama graph canvas (C toggles; hosted here like the
-                    // shader editor — draw_panels stays untouched). Preview
+                    // shader editor). Preview
                     // textures created during last frame's execute register
                     // with egui here, right before the canvas needs their
                     // TextureIds; dead ones are freed on the same call.
@@ -1156,7 +1118,7 @@ impl ApplicationHandler for FosforaApp {
                     app.layer_thumbs
                         .register(&app.gpu.device, &mut app.egui_overlay.renderer);
                     crate::trama::ui::canvas::follow_tour(&ctx, &mut app.trama);
-                    if app.settings.classic_layout || app.shader_editor.open {
+                    if app.shader_editor.open {
                         crate::trama::ui::canvas::draw_trama_window(
                             &ctx,
                             &mut app.trama,
@@ -1230,10 +1192,7 @@ impl ApplicationHandler for FosforaApp {
                     );
 
                     // Over everything it points at, the modals included.
-                    if !app.settings.classic_layout
-                        && !app.shader_editor.open
-                        && app.egui_overlay.visible
-                    {
+                    if !app.shader_editor.open && app.egui_overlay.visible {
                         crate::ui::tour::draw(&ctx);
                     }
 
@@ -1758,16 +1717,6 @@ impl ApplicationHandler for FosforaApp {
                     .data_mut(|d| d.remove_temp(egui::Id::new("set_flash_limit")));
                 if let Some(limit) = set_flash_limit {
                     app.settings.flash_limit = limit;
-                    app.settings.save();
-                }
-
-                // Classic / workspace layout switch (#3122)
-                let set_classic_layout: Option<bool> = app
-                    .egui_overlay
-                    .context()
-                    .data_mut(|d| d.remove_temp(egui::Id::new("set_classic_layout")));
-                if let Some(on) = set_classic_layout {
-                    app.settings.classic_layout = on;
                     app.settings.save();
                 }
 

@@ -420,28 +420,4 @@ pub fn general_page(ui: &mut Ui, s: &mut ShellState<'_>) {
             });
         },
     );
-    kit::block(
-        ui,
-        "Layout",
-        None,
-        |_| {},
-        |ui| {
-            kit::tall_row(ui, "Classic layout", |ui| {
-                let mut on = s.settings.classic_layout;
-                if ui
-                    .checkbox(
-                        &mut on,
-                        RichText::new(
-                            "Use the two side panels instead of Perform, Build and Setup",
-                        )
-                        .size(kit::LABEL_SIZE),
-                    )
-                    .changed()
-                {
-                    kit::send(ui, "set_classic_layout", on);
-                }
-                kit::help(ui, "The Classic layout goes away in v2.1.");
-            });
-        },
-    );
 }

@@ -14,6 +14,9 @@
 - **Dissolves keep the outgoing preset moving.** It used to freeze for the length of the fade. Both presets render during a Dissolve, so if that stutters on your machine, untick **Keep moving** next to Dissolve in the Switch row or the cue editor. Presets with a trama chain or a locked layer still fade from a still.
 - **Morph crossfades layers that change effect.** A Morph between presets or scene cues with different effects used to land as a cut; those layers now crossfade while the rest morph.
 
+### Removed
+- **The Classic layout.** The two side panels that v2.0 kept as an option in Setup ▸ General are gone; everything lives in Perform, Build and Setup. A settings file that chose Classic opens in the workspace.
+
 ### Fixed
 - **Changing your mind while a preset with a video was loading** switched back to that preset seconds later, when its video finished decoding; the later choice now sticks.
 - **A scene cue dissolving into a preset with a video** faded into the old preset and then hard-cut to the new one once the video loaded, about 13 s later for a typical clip. The dissolve now starts when the video is ready.

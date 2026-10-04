@@ -4294,14 +4294,13 @@ impl App {
 
     /// Put the finished frame on the window — or don't.
     ///
-    /// The v1 layout draws its panels over a full-window render, so the window
-    /// gets the composite. The workspace shell shows the output in a preview
-    /// instead, and blitting it full-window as well left the render glowing
-    /// through every panel's translucent fill. There the window gets the
+    /// The workspace shell shows the output in a preview, and blitting it
+    /// full-window as well left the render glowing through every panel's
+    /// translucent fill. So while the interface shows, the window gets the
     /// interface's own ground, and the composite reaches the eye only through
     /// the preview.
     ///
-    /// Hiding the interface (F) means full output in either layout.
+    /// Hiding the interface (D) means full output.
     ///
     /// A free function rather than a method: the frame holds
     /// `&mut self.compositor` across this point, and `&self` collides with it.
@@ -4422,9 +4421,9 @@ impl App {
             trama.drop_chain(chain);
         });
 
-        // Only the workspace shell draws layer rows with pictures; the Classic
-        // panels and a hidden interface pay nothing for them.
-        let tap_thumbs = !self.settings.classic_layout && self.egui_overlay.visible;
+        // Layer rows draw with pictures; a hidden interface pays nothing for
+        // them.
+        let tap_thumbs = self.egui_overlay.visible;
 
         // Compute the HDR source from layer execution + compositing — shared
         // with the headless renderer.
@@ -4529,7 +4528,7 @@ impl App {
                 &self.display,
                 scope.encoder(),
                 &surface_view,
-                self.settings.classic_layout || !self.egui_overlay.visible,
+                !self.egui_overlay.visible,
                 self.egui_overlay.palette.bg,
             );
             // Master's row picture, from the finished frame (#3123).

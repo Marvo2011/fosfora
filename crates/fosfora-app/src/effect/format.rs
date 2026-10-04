@@ -221,8 +221,7 @@ pub struct PfxEffect {
     /// The catalog family: one of `ui::panels::catalog_panel::FAMILIES`
     /// (`"particles"`, `"fluid"`, `"life"`, `"pattern"`, `"3d"`, `"media"`,
     /// `"overlay"`). `"effect"`, the default, names none and lists under Other.
-    /// Classic's panel groups `"overlay"` on its own. A test holds every
-    /// shipped effect to a family.
+    /// A test holds every shipped effect to a family.
     #[serde(
         default = "default_category",
         skip_serializing_if = "is_default_category"
