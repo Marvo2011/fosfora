@@ -26,15 +26,20 @@ body { display: flex; flex-direction: column; }
 .status-dot.beat { background: var(--beat); }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); min-width: 0; }
 #bpmDisplay { white-space: nowrap; }
-/* Network streams: the settings page's lights, grey while Fosfora is unreachable */
+/* Network streams: the settings page's lights, gray while Fosfora is unreachable.
+   The shape says the state too, so it does not rest on color: a filled dot is
+   connected, a ring is waiting for the sender, a cross is down. */
 .streams { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 .streams:not(:empty) { margin-right: 14px; }
 .stream { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .stream-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stream .status-dot.down { background: #e5484d; }
-.stream .status-dot.waiting { background: #f5c518; }
-.stream .status-dot.connected { background: #3fc35f; }
-.streams.offline .status-dot { background: #555; }
+.stream-light { --c: #555; position: relative; width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; }
+.stream-light.down { --c: #e5484d; border-radius: 0; }
+.stream-light.waiting { --c: #f5c518; border: 2px solid var(--c); }
+.stream-light.connected { --c: #3fc35f; background: var(--c); }
+.stream-light.down::before, .stream-light.down::after { content: ''; position: absolute; left: -1px; right: -1px; top: 4px; height: 2px; background: var(--c); transform: rotate(45deg); }
+.stream-light.down::after { transform: rotate(-45deg); }
+.streams.offline .stream-light { --c: #555; }
 
 /* Audio bars — labeled, 60px tall */
 .audio-section { background: var(--surface); padding: 6px 12px 8px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
@@ -535,8 +540,11 @@ body { display: flex; flex-direction: column; }
     streams.forEach(function(s) {
       var el = document.createElement('div');
       el.className = 'stream';
+      el.title = s.name + ': ' + s.status;
       var dot = document.createElement('div');
-      dot.className = 'status-dot ' + s.light;
+      dot.className = 'stream-light ' + s.light;
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', s.status);
       var name = document.createElement('span');
       name.className = 'stream-name';
       name.textContent = s.name;

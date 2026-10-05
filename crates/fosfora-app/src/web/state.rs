@@ -27,6 +27,8 @@ pub struct StreamInfo {
     /// `down`, `waiting` or `connected`: the settings page's red, yellow
     /// and green.
     pub light: &'static str,
+    /// The settings page's words for it, such as "Live, 1920x1080".
+    pub status: String,
 }
 
 #[derive(Serialize)]

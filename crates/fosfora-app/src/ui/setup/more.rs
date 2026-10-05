@@ -268,10 +268,7 @@ fn stream_rows(ui: &mut Ui, streams: &[crate::settings::RtmpStream]) {
         let state = status.iter().find(|(name, _)| *name == stream.name);
         let (light, words) = match state {
             Some((_, (light, words))) => (*light, words.as_str()),
-            None if stream.is_usable() => (
-                StreamLight::Down,
-                "Not listening: FFmpeg is missing, or a camera has this name",
-            ),
+            None if stream.is_usable() => (StreamLight::Down, crate::media::stream::NOT_LISTENING),
             None => (StreamLight::Down, "Off"),
         };
         ui.horizontal_wrapped(|ui| {

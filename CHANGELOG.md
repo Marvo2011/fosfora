@@ -3,6 +3,11 @@
 <!-- Release workflow extracts notes between ## vX.Y.Z headers via awk. -->
 <!-- Keep the "## vX.Y.Z — date" format for automatic release notes. -->
 
+## Unreleased
+
+### Added
+- **Network stream status in the web remote.** The header shows each stream that is switched on, next to the BPM, so you can check every stream is live before loading a preset. A filled dot means connected, a ring means waiting for the sender and a cross means down; hover for the settings page's words. Contributed by @Marvo2011.
+
 ## v2.2.0 — 2026-10-04
 
 Two optical-illusion effects in a new Illusions tab of the catalog, and a `kick` that no longer

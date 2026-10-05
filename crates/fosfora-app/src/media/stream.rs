@@ -23,6 +23,10 @@ const RETRY: Duration = Duration::from_secs(2);
 /// reconnects at once finds it listening.
 const REOPEN: Duration = Duration::from_millis(200);
 
+/// What a stream switched on but not opened says: it failed to start, or a
+/// camera has its name. The settings page and the web remote both show it.
+pub const NOT_LISTENING: &str = "Not listening: FFmpeg is missing, or a camera has this name";
+
 /// What a stream's status light shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamLight {

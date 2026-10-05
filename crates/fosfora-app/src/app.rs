@@ -827,7 +827,8 @@ impl App {
                 )
             })
             .collect();
-        // Every stream switched on, with the light the settings page shows.
+        // Every stream switched on, with the light and words the settings
+        // page shows.
         #[cfg(feature = "webcam")]
         let streams = self
             .settings
@@ -835,19 +836,21 @@ impl App {
             .iter()
             .filter(|s| s.is_usable())
             .map(|s| {
-                use crate::media::stream::StreamLight;
-                let light = self
+                use crate::media::stream::{NOT_LISTENING, StreamLight};
+                let (light, status) = self
                     .webcam_captures
                     .iter()
                     .filter(|c| c.device_name() == s.name)
-                    .find_map(|c| c.stream_status());
+                    .find_map(|c| c.stream_status())
+                    .unwrap_or((StreamLight::Down, NOT_LISTENING.to_string()));
                 crate::web::state::StreamInfo {
                     name: s.name.clone(),
                     light: match light {
-                        Some((StreamLight::Connected, _)) => "connected",
-                        Some((StreamLight::Waiting, _)) => "waiting",
-                        Some((StreamLight::Down, _)) | None => "down",
+                        StreamLight::Connected => "connected",
+                        StreamLight::Waiting => "waiting",
+                        StreamLight::Down => "down",
                     },
+                    status,
                 }
             })
             .collect();
