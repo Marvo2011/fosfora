@@ -105,11 +105,13 @@ body { display: flex; flex-direction: column; }
 /* Enable checkbox — bigger touch target */
 .layer-cb { width: 24px; height: 24px; accent-color: var(--accent); cursor: pointer; }
 
-/* Presets — bigger */
-.preset-btn { display: block; width: 100%; padding: 16px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; text-align: left; cursor: pointer; margin-bottom: 8px; min-height: var(--btn-min); }
+/* Presets — same grid as the effects */
+.presets-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.presets-grid > .preset-section-label, .presets-grid > .empty-msg { grid-column: 1 / -1; }
+.preset-btn { padding: 14px 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; text-align: center; overflow-wrap: anywhere; cursor: pointer; min-height: var(--btn-min); display: flex; align-items: center; justify-content: center; }
 .preset-btn.active { background: var(--accent2); border-color: var(--accent); color: #fff; }
 .preset-btn:active { opacity: 0.8; }
-.preset-section-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin: 10px 0 4px; }
+.preset-section-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin: 6px 0 0; }
 
 /* Triggers — bigger */
 .trigger-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -191,7 +193,7 @@ body { display: flex; flex-direction: column; }
   </div>
 
   <div class="panel" id="panel-presets">
-    <div id="presetsContainer"></div>
+    <div class="presets-grid" id="presetsContainer"></div>
   </div>
 </div>
 
@@ -220,6 +222,10 @@ body { display: flex; flex-direction: column; }
   const paramsContainer = document.getElementById('paramsContainer');
   const layersContainer = document.getElementById('layersContainer');
   const presetsContainer = document.getElementById('presetsContainer');
+  let presetsKey = '';
+  // The preset just tapped here, shown as selected until the app reports it (or gives up).
+  let pendingPreset = null;
+  let pendingPresetUntil = 0;
   const ppToggle = document.getElementById('ppToggle');
   const bars = [0,1,2,3,4,5,6].map(i => document.getElementById('bar'+i));
 
@@ -490,7 +496,30 @@ body { display: flex; flex-direction: column; }
     });
   }
 
+  // A preset with media or a transition loads a moment after the tap, and the app keeps
+  // reporting the old one until then. Hold the tapped one so the highlight does not jump back.
+  function shownPreset() {
+    if (pendingPreset !== null && (state.current_preset === pendingPreset || Date.now() > pendingPresetUntil)) {
+      pendingPreset = null;
+    }
+    return pendingPreset !== null ? pendingPreset : state.current_preset;
+  }
+
+  // Full state arrives at 10 Hz; rebuild the buttons only when the list changed,
+  // and move the highlight without touching the rest.
   function renderPresets() {
+    var key = JSON.stringify(state ? state.presets : null);
+    if (key !== presetsKey) {
+      presetsKey = key;
+      buildPresets();
+    }
+    if (!state) return;
+    var current = shownPreset();
+    presetsContainer.querySelectorAll('.preset-btn').forEach(function(btn) {
+      btn.classList.toggle('active', Number(btn.dataset.index) === current);
+    });
+  }
+  function buildPresets() {
     presetsContainer.innerHTML = '';
     if (!state || !state.presets || state.presets.length === 0) {
       presetsContainer.innerHTML = '<div class="empty-msg">No presets</div>';
@@ -521,10 +550,12 @@ body { display: flex; flex-direction: column; }
   }
   function makePresetBtn(p) {
     var btn = document.createElement('div');
-    btn.className = 'preset-btn' + (p.index === state.current_preset ? ' active' : '');
+    btn.className = 'preset-btn';
+    btn.dataset.index = p.index;
     btn.textContent = p.name;
     btn.addEventListener('click', function() {
-      state.current_preset = p.index;
+      pendingPreset = p.index;
+      pendingPresetUntil = Date.now() + 10000;
       renderPresets();
       send({ type: 'load_preset', index: p.index });
     });
