@@ -222,10 +222,13 @@ body { display: flex; flex-direction: column; }
   const paramsContainer = document.getElementById('paramsContainer');
   const layersContainer = document.getElementById('layersContainer');
   const presetsContainer = document.getElementById('presetsContainer');
+  let effectsKey = '';
+  let paramsKey = '';
+  let paramSyncs = [];
+  let layersKey = '';
+  let layerSyncs = [];
   let presetsKey = '';
-  // The preset just tapped here, shown as selected until the app reports it (or gives up).
-  let pendingPreset = null;
-  let pendingPresetUntil = 0;
+  let holds = {};
   const ppToggle = document.getElementById('ppToggle');
   const bars = [0,1,2,3,4,5,6].map(i => document.getElementById('bar'+i));
 
@@ -323,6 +326,7 @@ body { display: flex; flex-direction: column; }
     switch(msg.type) {
       case 'state':
         state = msg;
+        state.active_layer = shown('active_layer', msg.active_layer);
         renderAll();
         renderStreams(msg.streams || []);
         break;
@@ -336,7 +340,7 @@ body { display: flex; flex-direction: column; }
         if (state) updateLayer(msg);
         break;
       case 'active_layer':
-        if (state) { state.active_layer = msg.index; renderLayers(); renderParams(); }
+        if (state) { state.active_layer = shown('active_layer', msg.index); renderLayers(); renderParams(); renderEffects(); }
         break;
       case 'effect_loaded':
         if (state) handleEffectLoaded(msg);
@@ -356,88 +360,155 @@ body { display: flex; flex-direction: column; }
     updatePP();
   }
 
+  // Full state arrives at 10 Hz. Each panel rebuilds its controls only when the set of
+  // them changed and otherwise updates them in place, so a rebuild never cuts off a tap
+  // or a drag.
+  //
+  // A value changed here is held until the app reports it (or the hold runs out): the app
+  // keeps reporting the old one for a moment, and the control would jump back.
+  function hold(key, value, ms) {
+    holds[key] = { value: value, until: Date.now() + (ms || 1000) };
+  }
+  function shown(key, reported) {
+    var h = holds[key];
+    if (!h) return reported;
+    var arrived = typeof reported === 'number' && typeof h.value === 'number'
+      ? Math.abs(reported - h.value) < 0.002
+      : reported === h.value;
+    if (arrived || Date.now() > h.until) {
+      delete holds[key];
+      return reported;
+    }
+    return h.value;
+  }
+
   function renderEffects() {
-    effectsGrid.innerHTML = '';
-    if (!state || !state.effects) return;
-    const activeLayer = state.layers[state.active_layer];
-    const activeIdx = activeLayer ? activeLayer.effect_index : null;
-    state.effects.forEach(fx => {
-      const btn = document.createElement('div');
-      btn.className = 'effect-btn' + (fx.index === activeIdx ? ' active' : '');
-      btn.textContent = fx.name;
-      btn.addEventListener('click', () => {
-        send({ type: 'load_effect', index: fx.index });
+    const effects = (state && state.effects) || [];
+    const key = JSON.stringify(effects.map(fx => [fx.index, fx.name]));
+    if (key !== effectsKey) {
+      effectsKey = key;
+      effectsGrid.innerHTML = '';
+      effects.forEach(fx => {
+        const btn = document.createElement('div');
+        btn.className = 'effect-btn';
+        btn.dataset.index = fx.index;
+        btn.textContent = fx.name;
+        btn.addEventListener('click', () => {
+          hold('effect_' + state.active_layer, fx.index, 3000);
+          renderEffects();
+          send({ type: 'load_effect', index: fx.index });
+        });
+        effectsGrid.appendChild(btn);
       });
-      effectsGrid.appendChild(btn);
+    }
+    if (!state || !state.layers) return;
+    const activeLayer = state.layers[state.active_layer];
+    const activeIdx = shown('effect_' + state.active_layer, activeLayer ? activeLayer.effect_index : null);
+    effectsGrid.querySelectorAll('.effect-btn').forEach(btn => {
+      btn.classList.toggle('active', Number(btn.dataset.index) === activeIdx);
     });
   }
 
   function renderParams() {
+    const layer = state && state.layers ? state.layers[state.active_layer] : null;
+    const params = (layer && layer.params) || [];
+    const key = JSON.stringify([
+      state ? state.active_layer : null,
+      layer ? layer.effect_name : null,
+      params.map(p => [p.name, p.type, p.min, p.max]),
+    ]);
+    if (key !== paramsKey) {
+      paramsKey = key;
+      buildParams(layer, params);
+    }
+    paramSyncs.forEach(sync => sync(params));
+  }
+  function buildParams(layer, params) {
     paramsContainer.innerHTML = '';
+    paramSyncs = [];
     const header = document.getElementById('paramHeader');
     if (!state || !state.layers) { header.textContent = ''; return; }
-    const layer = state.layers[state.active_layer];
     const layerLabel = 'Layer ' + (state.active_layer + 1);
     const effectLabel = layer && layer.effect_name ? layer.effect_name : '(no effect)';
-    header.innerHTML = '<span style="color:var(--accent);font-weight:600;">' + layerLabel + '</span> <span style="color:var(--text2);margin:0 4px;">\u2014</span> <span>' + effectLabel + '</span>';
-    if (!layer || !layer.params || layer.params.length === 0) {
+    header.innerHTML = '<span style="color:var(--accent);font-weight:600;">' + layerLabel + '</span> <span style="color:var(--text2);margin:0 4px;">—</span> <span>' + effectLabel + '</span>';
+    if (params.length === 0) {
       paramsContainer.innerHTML = '<div class="empty-msg">No parameters</div>';
       return;
     }
 
-    layer.params.forEach(p => {
+    params.forEach((p, pi) => {
+      const holdKey = 'param_' + state.active_layer + '_' + p.name;
       if (p.type === 'float') {
         const row = document.createElement('div');
         row.className = 'param-row';
-        const valDisplay = (p.min + (p.max - p.min) * p.value).toFixed(2);
-        row.innerHTML = '<div class="param-label"><span class="param-name">' + p.name + '</span><span class="param-value">' + valDisplay + '</span></div>';
+        row.innerHTML = '<div class="param-label"><span class="param-name">' + p.name + '</span><span class="param-value"></span></div>';
+        const valEl = row.querySelector('.param-value');
+        const show = v => { valEl.textContent = (p.min + (p.max - p.min) * v).toFixed(2); };
         const slider = document.createElement('input');
         slider.type = 'range';
         slider.className = 'param-slider';
         slider.min = 0;
         slider.max = 1000;
-        slider.value = Math.round(p.value * 1000);
         slider.setAttribute('touch-action', 'none');
         slider.addEventListener('input', function(e) {
           const v = parseInt(e.target.value) / 1000;
-          p.value = v;
-          row.querySelector('.param-value').textContent = (p.min + (p.max - p.min) * v).toFixed(2);
+          hold(holdKey, v);
+          show(v);
           throttledSend('param_' + p.name, { type: 'set_param', name: p.name, value: v });
         });
         row.appendChild(slider);
         paramsContainer.appendChild(row);
+        paramSyncs.push(current => {
+          const v = shown(holdKey, current[pi].value);
+          const pos = String(Math.round(v * 1000));
+          if (slider.value !== pos) slider.value = pos;
+          show(v);
+        });
       } else if (p.type === 'bool') {
         const toggle = document.createElement('div');
-        toggle.className = 'param-toggle' + (p.value > 0.5 ? ' on' : '');
+        toggle.className = 'param-toggle';
         toggle.innerHTML = '<div class="param-toggle-dot"></div><span>' + p.name + '</span>';
         toggle.addEventListener('click', function() {
-          p.value = p.value > 0.5 ? 0 : 1;
-          toggle.classList.toggle('on', p.value > 0.5);
-          toggle.querySelector('.param-toggle-dot').style.background = p.value > 0.5 ? '#fff' : '#555';
-          send({ type: 'set_param', name: p.name, value: p.value });
+          const v = toggle.classList.contains('on') ? 0 : 1;
+          hold(holdKey, v);
+          toggle.classList.toggle('on', v > 0.5);
+          send({ type: 'set_param', name: p.name, value: v });
         });
         paramsContainer.appendChild(toggle);
+        paramSyncs.push(current => {
+          toggle.classList.toggle('on', shown(holdKey, current[pi].value) > 0.5);
+        });
       }
     });
   }
 
   function renderLayers() {
+    const layers = (state && state.layers) || [];
+    const key = JSON.stringify(layers.map(l => l.name));
+    if (key !== layersKey) {
+      layersKey = key;
+      buildLayers(layers);
+    }
+    layers.forEach((layer, i) => layerSyncs[i](layer));
+  }
+  function buildLayers(layers) {
     layersContainer.innerHTML = '';
-    if (!state || !state.layers) return;
+    layerSyncs = [];
 
     // Must stay in lockstep with BlendMode in gpu/layer.rs (index == as_u32).
     // The last three are the displacement family (#1478).
     const blendNames = ['Normal','Add','Screen','Color Dodge','Multiply','Overlay','Hard Light','Difference','Exclusion','Subtract','Displace','Refract','Lens'];
 
-    state.layers.forEach(function(layer, i) {
+    layers.forEach(function(layer, i) {
       const card = document.createElement('div');
-      card.className = 'layer-card' + (i === state.active_layer ? ' active' : '') + (!layer.enabled ? ' disabled' : '');
 
       // Info area (tap to select)
       const info = document.createElement('div');
       info.className = 'layer-info';
-      info.innerHTML = '<div class="layer-name">' + layer.name + '</div><div class="layer-effect">' + (layer.effect_name || '(empty)') + '</div>';
+      info.innerHTML = '<div class="layer-name">' + layer.name + '</div><div class="layer-effect"></div>';
+      const effectEl = info.querySelector('.layer-effect');
       info.addEventListener('click', function() {
+        hold('active_layer', i);
         state.active_layer = i;
         renderLayers();
         renderParams();
@@ -457,10 +528,10 @@ body { display: flex; flex-direction: column; }
         const opt = document.createElement('option');
         opt.value = bi;
         opt.textContent = name;
-        if (bi === layer.blend_mode) opt.selected = true;
         sel.appendChild(opt);
       });
       sel.addEventListener('change', function() {
+        hold('blend_' + i, parseInt(sel.value));
         send({ type: 'set_layer_blend', layer: i, value: parseInt(sel.value) });
       });
       controls.appendChild(sel);
@@ -472,10 +543,10 @@ body { display: flex; flex-direction: column; }
       opSlider.type = 'range';
       opSlider.min = 0;
       opSlider.max = 100;
-      opSlider.value = Math.round(layer.opacity * 100);
       opSlider.setAttribute('touch-action', 'none');
       opSlider.addEventListener('input', function(e) {
         var v = parseInt(e.target.value) / 100;
+        hold('opacity_' + i, v);
         throttledSend('opacity_' + i, { type: 'set_layer_opacity', layer: i, value: v });
       });
       opWrap.appendChild(opSlider);
@@ -484,29 +555,30 @@ body { display: flex; flex-direction: column; }
       // Enable checkbox
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = layer.enabled;
       cb.className = 'layer-cb';
       cb.addEventListener('change', function() {
+        hold('enabled_' + i, cb.checked);
+        renderLayers();
         send({ type: 'set_layer_enabled', layer: i, value: cb.checked });
       });
       controls.appendChild(cb);
 
       card.appendChild(controls);
       layersContainer.appendChild(card);
+
+      layerSyncs.push(function(current) {
+        const enabled = shown('enabled_' + i, current.enabled);
+        card.className = 'layer-card' + (i === state.active_layer ? ' active' : '') + (!enabled ? ' disabled' : '');
+        effectEl.textContent = current.effect_name || '(empty)';
+        // An open picker keeps its own selection until the user is done with it.
+        if (document.activeElement !== sel) sel.value = shown('blend_' + i, current.blend_mode);
+        const pos = String(Math.round(shown('opacity_' + i, current.opacity) * 100));
+        if (opSlider.value !== pos) opSlider.value = pos;
+        cb.checked = enabled;
+      });
     });
   }
 
-  // A preset with media or a transition loads a moment after the tap, and the app keeps
-  // reporting the old one until then. Hold the tapped one so the highlight does not jump back.
-  function shownPreset() {
-    if (pendingPreset !== null && (state.current_preset === pendingPreset || Date.now() > pendingPresetUntil)) {
-      pendingPreset = null;
-    }
-    return pendingPreset !== null ? pendingPreset : state.current_preset;
-  }
-
-  // Full state arrives at 10 Hz; rebuild the buttons only when the list changed,
-  // and move the highlight without touching the rest.
   function renderPresets() {
     var key = JSON.stringify(state ? state.presets : null);
     if (key !== presetsKey) {
@@ -514,7 +586,7 @@ body { display: flex; flex-direction: column; }
       buildPresets();
     }
     if (!state) return;
-    var current = shownPreset();
+    var current = shown('preset', state.current_preset);
     presetsContainer.querySelectorAll('.preset-btn').forEach(function(btn) {
       btn.classList.toggle('active', Number(btn.dataset.index) === current);
     });
@@ -554,8 +626,8 @@ body { display: flex; flex-direction: column; }
     btn.dataset.index = p.index;
     btn.textContent = p.name;
     btn.addEventListener('click', function() {
-      pendingPreset = p.index;
-      pendingPresetUntil = Date.now() + 10000;
+      // A preset with media or a transition loads a moment after the tap.
+      hold('preset', p.index, 10000);
       renderPresets();
       send({ type: 'load_preset', index: p.index });
     });
@@ -613,23 +685,7 @@ body { display: flex; flex-direction: column; }
     var p = layer.params.find(function(p) { return p.name === msg.name; });
     if (p) {
       p.value = msg.value;
-      if (msg.layer === state.active_layer) {
-        var sliders = paramsContainer.querySelectorAll('.param-slider');
-        var rows = paramsContainer.querySelectorAll('.param-row');
-        var floatIdx = 0;
-        layer.params.forEach(function(param) {
-          if (param.type === 'float') {
-            if (param.name === msg.name && sliders[floatIdx]) {
-              if (document.activeElement !== sliders[floatIdx]) {
-                sliders[floatIdx].value = Math.round(msg.value * 1000);
-                var valEl = rows[floatIdx] && rows[floatIdx].querySelector('.param-value');
-                if (valEl) valEl.textContent = (param.min + (param.max - param.min) * msg.value).toFixed(2);
-              }
-            }
-            floatIdx++;
-          }
-        });
-      }
+      if (msg.layer === state.active_layer) renderParams();
     }
   }
 
