@@ -3,7 +3,9 @@
 <!-- Release workflow extracts notes between ## vX.Y.Z headers via awk. -->
 <!-- Keep the "## vX.Y.Z — date" format for automatic release notes. -->
 
-## Unreleased
+## v2.3.0 — 2026-10-06
+
+The web remote shows whether each network stream is live, and its buttons no longer miss taps.
 
 ### Added
 - **Network stream status in the web remote.** The header shows each stream that is switched on, next to the BPM, so you can check every stream is live before loading a preset. A filled dot means connected, a ring means waiting for the sender and a cross means down; hover for the settings page's words. Contributed by @Marvo2011.
